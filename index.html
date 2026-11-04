@@ -59,10 +59,11 @@
           <h3 id="card-gmg" class="m-0 text-success">0</h3>
         </div>
       </div>
+      <!-- CARD MODIFICADO PARA ANÁLISE DE MÃO DE OBRA -->
       <div class="col-md-2">
         <div class="card card-kpi p-3 bg-white border-start border-secondary border-4">
-          <small class="text-muted fw-bold">AGUARD. SOBRESSALENTE</small>
-          <h3 id="card-sobressalente" class="m-0 text-secondary">0</h3>
+          <small class="text-muted fw-bold">ANÁLISE DE MÃO DE OBRA</small>
+          <h3 id="card-mao-de-obra" class="m-0 text-secondary">0</h3>
         </div>
       </div>
     </div>
@@ -150,11 +151,12 @@
             <label class="form-label small fw-bold">Status de Atendimento:</label>
             <select id="modal-status-op" class="form-select form-select-sm">
               <option value="Pendente">Pendente</option>
+              <option value="Em tratativa">Em tratativa</option>
               <option value="Em deslocamento">Em deslocamento</option>
               <option value="Em atendimento">Em atendimento</option>
               <option value="Com GMG acoplado">Com GMG acoplado</option>
               <option value="GMG em deslocamento">GMG em deslocamento</option>
-              <option value="Aguardando sobressalente">Aguardando sobressalente</option>
+              <option value="Análise de Mão de Obra">Análise de Mão de Obra</option>
               <option value="Concluído">Concluído</option>
             </select>
           </div>
@@ -174,15 +176,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // LINK CSV PUBLICADO DA SUA PLANILHA:
     const URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSqo-oRoCVNXTJE8RxAnfQcNWPty232zFuVArT6l-1w4CnsSLO7YETVeBsKPWh0SkwX8wVg-VT7Vb80/pub?gid=2115875129&single=true&output=csv";
-
-    // URL DA IMPLANTAÇÃO WEB APP DO APPS SCRIPT (Para salvar):
-    // Cole aqui a URL gerada em: Implantar > Gerenciar Implantações > URL do App da Web
     const URL_APPS_SCRIPT_WEBAPP = "COLE_AQUI_A_URL_DO_WEBAPP_APPS_SCRIPT";
 
     let dadosGlobais = [];
     let modalInstance = null;
+
+    // Normaliza textos caso venham com codificação corrompida
+    function limparTexto(txt) {
+      if (!txt) return "";
+      return txt
+        .replace(/SERVIÃƒÂ‰|SERVIÃƒÂ|SERVIÃ‰|SERVIÃ/g, "SERVIÇ")
+        .replace(/RIBEIRÃƒÂƒO|RIBEIRÃƒO|RIBEIRÃO/g, "RIBEIRÃO")
+        .replace(/GRAÃƒÂ‡AS|GRAÃ‡AS/g, "GRAÇAS")
+        .replace(/PENÃƒÂPOLIS|PENÃPOLIS/g, "PENÁPOLIS")
+        .replace(/mÃƒÂ³dulos|mÃ³dulos/g, "módulos")
+        .replace(/gerÃƒÂ¢ncia|gerÃ¢ncia/g, "gerência");
+    }
 
     window.onload = function() {
       modalInstance = new bootstrap.Modal(document.getElementById('modalObs'));
@@ -191,8 +201,6 @@
 
     function carregarDados() {
       document.getElementById('txt-contador').innerText = 'Baixando dados...';
-      
-      // Adiciona timestamp para não pegar cache do navegador
       const urlSemCache = URL_CSV + "&_t=" + new Date().getTime();
 
       Papa.parse(urlSemCache, {
@@ -203,12 +211,12 @@
           dadosGlobais = results.data.map(r => ({
             ta: r["TA"] || "",
             ddd: r["DDD"] || "",
-            coordenador: r["Coordenador"] || "",
+            coordenador: limparTexto(r["Coordenador"] || ""),
             site: r["SITE"] || "",
-            localidade: r["Localidade"] || "",
-            site_nome: r["SITE Nome"] || "",
+            localidade: limparTexto(r["Localidade"] || ""),
+            site_nome: limparTexto(r["SITE Nome"] || ""),
             qtd_ta: r["QTD TA"] || "",
-            alarme: r["Alarme"] || "",
+            alarme: limparTexto(r["Alarme"] || ""),
             tempo_total: r["Tempo Total"] || "",
             tempo_gestor: r["Tempo Gestor Tel"] || "",
             prioridade: r["Prioridade"] || "",
@@ -273,24 +281,44 @@
         return atendeDdd && atendePrio && atendeSla && atendeStatusOp && atendeBusca;
       });
 
-      // Cards
+      // Atualiza os Cards
       document.getElementById('card-total').innerText = filtrados.length;
       document.getElementById('card-vencendo').innerText = filtrados.filter(d => (d.status_sla || '').toUpperCase().includes('VENCENDO')).length;
       document.getElementById('card-fora').innerText = filtrados.filter(d => (d.status_sla || '').toUpperCase().includes('FORA')).length;
       document.getElementById('card-deslocamento').innerText = filtrados.filter(d => d.status_atendimento === 'Em deslocamento').length;
       document.getElementById('card-gmg').innerText = filtrados.filter(d => d.status_atendimento === 'Com GMG acoplado').length;
-      document.getElementById('card-sobressalente').innerText = filtrados.filter(d => d.status_atendimento === 'Aguardando sobressalente').length;
+      
+      // Contagem para o Card 'Análise de Mão de Obra'
+      document.getElementById('card-mao-de-obra').innerText = filtrados.filter(d => 
+        d.status_atendimento === 'Análise de Mão de Obra' || d.status_atendimento === 'Aguardando sobressalente'
+      ).length;
 
-      // Grid
+      // Monta as linhas da tabela
       const tbody = document.getElementById('tabela-corpo');
       tbody.innerHTML = '';
 
       filtrados.forEach(d => {
+        // Cor do Badge SLA
         let slaBadgeClass = 'badge bg-secondary';
         const sla = (d.status_sla || '').toUpperCase();
         if (sla.includes('VENCENDO')) slaBadgeClass = 'badge badge-vencendo';
         else if (sla.includes('FORA')) slaBadgeClass = 'badge badge-fora';
         else if (sla.includes('DENTRO')) slaBadgeClass = 'badge badge-dentro';
+
+        // Definição da Cor do Status de Atendimento:
+        // "Em tratativa" fica em VERDE (bg-success)
+        let statusBadgeClass = 'badge bg-info text-dark';
+        const statusAtual = (d.status_atendimento || '').trim();
+
+        if (statusAtual.toLowerCase() === 'em tratativa') {
+          statusBadgeClass = 'badge bg-success text-white';
+        } else if (statusAtual === 'Pendente') {
+          statusBadgeClass = 'badge bg-info text-dark';
+        } else if (statusAtual === 'Concluído') {
+          statusBadgeClass = 'badge bg-dark text-white';
+        } else if (statusAtual === 'Análise de Mão de Obra' || statusAtual === 'Aguardando sobressalente') {
+          statusBadgeClass = 'badge bg-secondary text-white';
+        }
 
         tbody.innerHTML += `
           <tr>
@@ -310,7 +338,7 @@
             <td><code>${d.tempo_gestor}</code></td>
             <td><span class="${slaBadgeClass}">${d.status_sla}</span></td>
             <td><span class="badge bg-light text-dark border">${d.tipo_rede || '-'}</span></td>
-            <td><span class="badge bg-info text-dark">${d.status_atendimento}</span></td>
+            <td><span class="${statusBadgeClass}">${d.status_atendimento}</span></td>
             <td><small>${d.previsao || '-'}</small></td>
             <td class="obs-cell" title="${d.observacao}">${d.observacao ? d.observacao : '<span class="text-muted">-</span>'}</td>
           </tr>
@@ -326,7 +354,12 @@
       document.getElementById('modal-detalhe-site').innerText = `${item.site} | ${item.site_nome} (${item.localidade} - DDD ${item.ddd})`;
       document.getElementById('modal-tipo-rede').value = item.tipo_rede || '';
       document.getElementById('modal-previsao').value = item.previsao || '';
-      document.getElementById('modal-status-op').value = item.status_atendimento || 'Pendente';
+      
+      // Mapeia caso ainda esteja com o termo antigo
+      let statusSelecionado = item.status_atendimento || 'Pendente';
+      if (statusSelecionado === 'Aguardando sobressalente') statusSelecionado = 'Análise de Mão de Obra';
+      document.getElementById('modal-status-op').value = statusSelecionado;
+      
       document.getElementById('modal-texto-obs').value = item.observacao || '';
       modalInstance.show();
     }
@@ -342,7 +375,6 @@
       btn.disabled = true;
       btn.innerText = 'Salvando...';
 
-      // Envia os dados para a API do Apps Script salvar na planilha original
       fetch(URL_APPS_SCRIPT_WEBAPP, {
         method: "POST",
         mode: "no-cors",
@@ -358,8 +390,7 @@
         btn.disabled = false;
         btn.innerText = 'Salvar';
         modalInstance.hide();
-        
-        // Atualiza a visualização na hora em memória
+
         const item = dadosGlobais.find(d => String(d.ta) === String(idTa));
         if (item) {
           item.tipo_rede = tipoRede;
