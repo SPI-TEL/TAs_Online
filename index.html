@@ -2,9 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Operacional - TAs Ativos</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     body { background-color: #f8f9fa; font-size: 0.85rem; }
     .card-kpi { border: none; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
@@ -103,7 +105,7 @@
               <th>Prio</th>
               <th>Localidade / SITE</th>
               <th>Alarme</th>
-              <th>Gestor Tel</th>
+              <th>Tempo Gestor</th>
               <th>SLA</th>
               <th>Rede</th>
               <th>Status Atendimento</th>
@@ -172,6 +174,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // LINK CSV PUBLICADO DA SUA PLANILHA:
+    const URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSqo-oRoCVNXTJE8RxAnfQcNWPty232zFuVArT6l-1w4CnsSLO7YETVeBsKPWh0SkwX8wVg-VT7Vb80/pub?gid=2115875129&single=true&output=csv";
+
+    // URL DA IMPLANTAÇÃO WEB APP DO APPS SCRIPT (Para salvar):
+    // Cole aqui a URL gerada em: Implantar > Gerenciar Implantações > URL do App da Web
+    const URL_APPS_SCRIPT_WEBAPP = "COLE_AQUI_A_URL_DO_WEBAPP_APPS_SCRIPT";
+
     let dadosGlobais = [];
     let modalInstance = null;
 
@@ -181,13 +190,45 @@
     };
 
     function carregarDados() {
-      document.getElementById('txt-contador').innerText = 'A carregar...';
-      google.script.run.withSuccessHandler(function(dados) {
-        dadosGlobais = dados;
-        popularFiltros(dados);
-        renderizar();
-        document.getElementById('txt-contador').innerText = `${dados.length} TAs ativos`;
-      }).obterDadosTAs();
+      document.getElementById('txt-contador').innerText = 'Baixando dados...';
+      
+      // Adiciona timestamp para não pegar cache do navegador
+      const urlSemCache = URL_CSV + "&_t=" + new Date().getTime();
+
+      Papa.parse(urlSemCache, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          dadosGlobais = results.data.map(r => ({
+            ta: r["TA"] || "",
+            ddd: r["DDD"] || "",
+            coordenador: r["Coordenador"] || "",
+            site: r["SITE"] || "",
+            localidade: r["Localidade"] || "",
+            site_nome: r["SITE Nome"] || "",
+            qtd_ta: r["QTD TA"] || "",
+            alarme: r["Alarme"] || "",
+            tempo_total: r["Tempo Total"] || "",
+            tempo_gestor: r["Tempo Gestor Tel"] || "",
+            prioridade: r["Prioridade"] || "",
+            grupo_responsavel: r["Grupo Responsavel"] || "",
+            status_sla: r["STATUS SLA"] || "",
+            tipo_rede: r["TIpo Rede"] || "",
+            status_atendimento: r["Status Atendimento"] || "Pendente",
+            previsao: r["Previsão"] || "",
+            observacao: r["Observação"] || ""
+          })).filter(d => d.ta && d.ta.trim() !== "");
+
+          popularFiltros(dadosGlobais);
+          renderizar();
+          document.getElementById('txt-contador').innerText = `${dadosGlobais.length} TAs ativos`;
+        },
+        error: function(err) {
+          document.getElementById('txt-contador').innerText = 'Erro ao carregar CSV';
+          console.error(err);
+        }
+      });
     }
 
     function popularFiltros(dados) {
@@ -232,7 +273,7 @@
         return atendeDdd && atendePrio && atendeSla && atendeStatusOp && atendeBusca;
       });
 
-      // Atualiza os Cards
+      // Cards
       document.getElementById('card-total').innerText = filtrados.length;
       document.getElementById('card-vencendo').innerText = filtrados.filter(d => (d.status_sla || '').toUpperCase().includes('VENCENDO')).length;
       document.getElementById('card-fora').innerText = filtrados.filter(d => (d.status_sla || '').toUpperCase().includes('FORA')).length;
@@ -240,7 +281,7 @@
       document.getElementById('card-gmg').innerText = filtrados.filter(d => d.status_atendimento === 'Com GMG acoplado').length;
       document.getElementById('card-sobressalente').innerText = filtrados.filter(d => d.status_atendimento === 'Aguardando sobressalente').length;
 
-      // Monta as linhas da tabela
+      // Grid
       const tbody = document.getElementById('tabela-corpo');
       tbody.innerHTML = '';
 
@@ -299,25 +340,39 @@
       const btn = document.getElementById('btn-salvar');
 
       btn.disabled = true;
-      btn.innerText = 'A guardar...';
+      btn.innerText = 'Salvando...';
 
-      google.script.run.withSuccessHandler(function(res) {
+      // Envia os dados para a API do Apps Script salvar na planilha original
+      fetch(URL_APPS_SCRIPT_WEBAPP, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ta: idTa,
+          tipoRede: tipoRede,
+          statusAtendimento: novoStatus,
+          previsao: novaPrevisao,
+          observacao: novaObs
+        })
+      }).then(() => {
         btn.disabled = false;
         btn.innerText = 'Salvar';
-        if (res.sucesso) {
-          modalInstance.hide();
-          const item = dadosGlobais.find(d => String(d.ta) === String(idTa));
-          if (item) {
-            item.tipo_rede = tipoRede;
-            item.status_atendimento = novoStatus;
-            item.previsao = novaPrevisao;
-            item.observacao = novaObs;
-          }
-          renderizar();
-        } else {
-          alert("Erro: " + res.erro);
+        modalInstance.hide();
+        
+        // Atualiza a visualização na hora em memória
+        const item = dadosGlobais.find(d => String(d.ta) === String(idTa));
+        if (item) {
+          item.tipo_rede = tipoRede;
+          item.status_atendimento = novoStatus;
+          item.previsao = novaPrevisao;
+          item.observacao = novaObs;
         }
-      }).salvarObservacaoTA(idTa, tipoRede, novoStatus, novaPrevisao, novaObs);
+        renderizar();
+      }).catch(err => {
+        btn.disabled = false;
+        btn.innerText = 'Salvar';
+        alert("Erro ao salvar: " + err);
+      });
     }
   </script>
 </body>
