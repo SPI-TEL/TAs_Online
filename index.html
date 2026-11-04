@@ -3,27 +3,173 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Operacional - TAs Ativos</title>
+  <title>Controle de Ordens de Serviço - Vivo / TEL</title>
+  
+  <!-- CSS Bootstrap & Ícones -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+  
+  <!-- Scripts para Leitura CSV e Exportação Excel (.xlsx) -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
   <style>
-    body { background-color: #f8f9fa; font-size: 0.85rem; }
-    .card-kpi { border: none; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    body { background-color: #f4f6f9; font-size: 0.85rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    
+    /* ESTILO DO CABEÇALHO PADRONIZADO (DARK MODERN) */
+    .header-painel {
+      background-color: #0b1325;
+      color: #ffffff;
+      border-radius: 14px;
+      padding: 16px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    }
+    .header-icon-box {
+      background-color: #0d2238;
+      border: 1px solid #16385c;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      color: #0dcaf0;
+    }
+    .header-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      margin-bottom: 2px;
+    }
+    .badge-sheets-live {
+      background-color: rgba(13, 202, 240, 0.15);
+      color: #0dcaf0;
+      border: 1px solid rgba(13, 202, 240, 0.35);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      vertical-align: middle;
+      margin-left: 8px;
+    }
+    .header-subtitle {
+      color: #8da2be;
+      font-size: 0.82rem;
+      margin: 0;
+    }
+    .sync-info {
+      text-align: right;
+      padding-right: 18px;
+      border-right: 1px solid #1f2f47;
+    }
+    .sync-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #7b8fa7;
+      letter-spacing: 0.6px;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+    }
+    .sync-time {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      letter-spacing: 1px;
+    }
+    .btn-header {
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .btn-header-sync {
+      background-color: #00965e;
+      border: 1px solid #00965e;
+      color: #ffffff;
+    }
+    .btn-header-sync:hover {
+      background-color: #007a4d;
+      color: #ffffff;
+    }
+    .btn-header-report {
+      background-color: #172338;
+      border: 1px solid #283953;
+      color: #d1dbe7;
+    }
+    .btn-header-report:hover {
+      background-color: #202f49;
+      color: #ffffff;
+    }
+    .btn-header-excel {
+      background-color: #1b63ff;
+      border: 1px solid #1b63ff;
+      color: #ffffff;
+    }
+    .btn-header-excel:hover {
+      background-color: #0f4ee6;
+      color: #ffffff;
+    }
+
+    /* CARDS & TABELA */
+    .card-kpi { border: none; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
     .badge-vencendo { background-color: #ffc107; color: #000; font-weight: bold; }
     .badge-fora { background-color: #dc3545; color: #fff; font-weight: bold; }
     .badge-dentro { background-color: #198754; color: #fff; }
     .table td, .table th { vertical-align: middle; }
     .obs-cell { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ESTILO PARA IMPRESSÃO (PDF) */
+    @media print {
+      body { background-color: #fff; font-size: 10pt; }
+      .header-painel, .btn, .modal, .card-kpi, .card:has(#filtro-ddd) { display: none !important; }
+      .table { width: 100% !important; }
+    }
   </style>
 </head>
 <body class="p-3">
   <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="m-0 text-primary fw-bold"><i class="bi bi-broadcast"></i> Acompanhamento Operacional - TAs Ativos (Vivo SP)</h5>
-      <div>
-        <span id="txt-contador" class="text-muted me-3"></span>
-        <button class="btn btn-sm btn-primary" onclick="carregarDados()"><i class="bi bi-arrow-clockwise"></i> Atualizar Dados</button>
+    
+    <!-- CABEÇALHO PADRONIZADO CONFORME MODELO -->
+    <div class="header-painel d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <!-- Esquerda: Ícone + Títulos -->
+      <div class="d-flex align-items-center gap-3">
+        <div class="header-icon-box shadow-sm">
+          <i class="bi bi-clock-history"></i>
+        </div>
+        <div>
+          <div class="header-title">
+            CONTROLE DE ORDENS DE SERVIÇO
+            <span class="badge-sheets-live"><i class="bi bi-broadcast me-1"></i>Google Sheets Live • Aba Analítico</span>
+          </div>
+          <p class="header-subtitle">Contrato Vivo / TEL • Acompanhamento Operacional, SLA & Eficiência em Tempo Real</p>
+        </div>
+      </div>
+
+      <!-- Direita: Relógio de Sincronização + Botões de Ação -->
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <div class="sync-info">
+          <div class="sync-label">ÚLTIMA SINCRONIZAÇÃO</div>
+          <div id="txt-ultima-sync" class="sync-time">--:--:--</div>
+        </div>
+        
+        <button class="btn btn-header btn-header-sync" onclick="carregarDados()">
+          <i class="bi bi-arrow-repeat"></i> Sincronizar
+        </button>
+        
+        <button class="btn btn-header btn-header-report" onclick="window.print()">
+          <i class="bi bi-printer"></i> Relatório / PDF
+        </button>
+        
+        <button class="btn btn-header btn-header-excel" onclick="exportarExcel()">
+          <i class="bi bi-file-earmark-excel"></i> Exportar Base (.xlsx)
+        </button>
       </div>
     </div>
 
@@ -59,7 +205,6 @@
           <h3 id="card-gmg" class="m-0 text-success">0</h3>
         </div>
       </div>
-      <!-- CARD MODIFICADO PARA ANÁLISE DE MÃO DE OBRA -->
       <div class="col-md-2">
         <div class="card card-kpi p-3 bg-white border-start border-secondary border-4">
           <small class="text-muted fw-bold">ANÁLISE DE MÃO DE OBRA</small>
@@ -180,9 +325,9 @@
     const URL_APPS_SCRIPT_WEBAPP = "COLE_AQUI_A_URL_DO_WEBAPP_APPS_SCRIPT";
 
     let dadosGlobais = [];
+    let dadosFiltradosAtuais = [];
     let modalInstance = null;
 
-    // Normaliza textos caso venham com codificação corrompida
     function limparTexto(txt) {
       if (!txt) return "";
       return txt
@@ -199,8 +344,13 @@
       carregarDados();
     };
 
+    function formatarHoraAtual() {
+      const agora = new Date();
+      return agora.toTimeString().split(' ')[0];
+    }
+
     function carregarDados() {
-      document.getElementById('txt-contador').innerText = 'Baixando dados...';
+      document.getElementById('txt-ultima-sync').innerText = "Carregando...";
       const urlSemCache = URL_CSV + "&_t=" + new Date().getTime();
 
       Papa.parse(urlSemCache, {
@@ -230,10 +380,10 @@
 
           popularFiltros(dadosGlobais);
           renderizar();
-          document.getElementById('txt-contador').innerText = `${dadosGlobais.length} TAs ativos`;
+          document.getElementById('txt-ultima-sync').innerText = formatarHoraAtual();
         },
         error: function(err) {
-          document.getElementById('txt-contador').innerText = 'Erro ao carregar CSV';
+          document.getElementById('txt-ultima-sync').innerText = "Erro!";
           console.error(err);
         }
       });
@@ -267,7 +417,7 @@
       const fStatusOp = document.getElementById('filtro-status-op').value;
       const fBusca = (document.getElementById('filtro-busca').value || '').toLowerCase();
 
-      const filtrados = dadosGlobais.filter(d => {
+      dadosFiltradosAtuais = dadosGlobais.filter(d => {
         const atendeDdd = !fDdd || String(d.ddd) === String(fDdd);
         const atendePrio = !fPrio || String(d.prioridade) === String(fPrio);
         const atendeSla = !fSla || String(d.status_sla) === String(fSla);
@@ -282,14 +432,12 @@
       });
 
       // Atualiza os Cards
-      document.getElementById('card-total').innerText = filtrados.length;
-      document.getElementById('card-vencendo').innerText = filtrados.filter(d => (d.status_sla || '').toUpperCase().includes('VENCENDO')).length;
-      document.getElementById('card-fora').innerText = filtrados.filter(d => (d.status_sla || '').toUpperCase().includes('FORA')).length;
-      document.getElementById('card-deslocamento').innerText = filtrados.filter(d => d.status_atendimento === 'Em deslocamento').length;
-      document.getElementById('card-gmg').innerText = filtrados.filter(d => d.status_atendimento === 'Com GMG acoplado').length;
-      
-      // Contagem para o Card 'Análise de Mão de Obra'
-      document.getElementById('card-mao-de-obra').innerText = filtrados.filter(d => 
+      document.getElementById('card-total').innerText = dadosFiltradosAtuais.length;
+      document.getElementById('card-vencendo').innerText = dadosFiltradosAtuais.filter(d => (d.status_sla || '').toUpperCase().includes('VENCENDO')).length;
+      document.getElementById('card-fora').innerText = dadosFiltradosAtuais.filter(d => (d.status_sla || '').toUpperCase().includes('FORA')).length;
+      document.getElementById('card-deslocamento').innerText = dadosFiltradosAtuais.filter(d => d.status_atendimento === 'Em deslocamento').length;
+      document.getElementById('card-gmg').innerText = dadosFiltradosAtuais.filter(d => d.status_atendimento === 'Com GMG acoplado').length;
+      document.getElementById('card-mao-de-obra').innerText = dadosFiltradosAtuais.filter(d => 
         d.status_atendimento === 'Análise de Mão de Obra' || d.status_atendimento === 'Aguardando sobressalente'
       ).length;
 
@@ -297,16 +445,13 @@
       const tbody = document.getElementById('tabela-corpo');
       tbody.innerHTML = '';
 
-      filtrados.forEach(d => {
-        // Cor do Badge SLA
+      dadosFiltradosAtuais.forEach(d => {
         let slaBadgeClass = 'badge bg-secondary';
         const sla = (d.status_sla || '').toUpperCase();
         if (sla.includes('VENCENDO')) slaBadgeClass = 'badge badge-vencendo';
         else if (sla.includes('FORA')) slaBadgeClass = 'badge badge-fora';
         else if (sla.includes('DENTRO')) slaBadgeClass = 'badge badge-dentro';
 
-        // Definição da Cor do Status de Atendimento:
-        // "Em tratativa" fica em VERDE (bg-success)
         let statusBadgeClass = 'badge bg-info text-dark';
         const statusAtual = (d.status_atendimento || '').trim();
 
@@ -346,6 +491,40 @@
       });
     }
 
+    function exportarExcel() {
+      if (!dadosFiltradosAtuais || dadosFiltradosAtuais.length === 0) {
+        alert("Não há dados para exportar no momento.");
+        return;
+      }
+      
+      const dadosPlanilha = dadosFiltradosAtuais.map(d => ({
+        "TA": d.ta,
+        "DDD": d.ddd,
+        "Prioridade": d.prioridade,
+        "Coordenador": d.coordenador,
+        "SITE": d.site,
+        "Localidade": d.localidade,
+        "SITE Nome": d.site_nome,
+        "QTD TA": d.qtd_ta,
+        "Alarme": d.alarme,
+        "Tempo Total": d.tempo_total,
+        "Tempo Gestor": d.tempo_gestor,
+        "Grupo Responsável": d.grupo_responsavel,
+        "Status SLA": d.status_sla,
+        "Tipo de Rede": d.tipo_rede,
+        "Status Atendimento": d.status_atendimento,
+        "Previsão": d.previsao,
+        "Observação": d.observacao
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dadosPlanilha);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Base_TAs_Filtrados");
+      
+      const dataHora = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      XLSX.writeFile(wb, `Base_TAs_${dataHora}.xlsx`);
+    }
+
     function abrirModal(idTa) {
       const item = dadosGlobais.find(d => String(d.ta) === String(idTa));
       if (!item) return;
@@ -355,7 +534,6 @@
       document.getElementById('modal-tipo-rede').value = item.tipo_rede || '';
       document.getElementById('modal-previsao').value = item.previsao || '';
       
-      // Mapeia caso ainda esteja com o termo antigo
       let statusSelecionado = item.status_atendimento || 'Pendente';
       if (statusSelecionado === 'Aguardando sobressalente') statusSelecionado = 'Análise de Mão de Obra';
       document.getElementById('modal-status-op').value = statusSelecionado;
